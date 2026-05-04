@@ -1,11 +1,14 @@
 using HoneyDrunk.Kernel.Abstractions.Lifecycle;
+using HoneyDrunk.Notify.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HoneyDrunk.Communications.Internal;
 
 /// <summary>
-/// Startup hook used to mark Communications as participating in Kernel lifecycle orchestration.
+/// Startup hook that validates Communications runtime dependencies.
 /// </summary>
-public sealed class CommunicationsStartupHook : IStartupHook
+/// <param name="serviceProvider">The service provider.</param>
+public sealed class CommunicationsStartupHook(IServiceProvider serviceProvider) : IStartupHook
 {
     /// <summary>
     /// Gets the startup hook priority.
@@ -13,9 +16,14 @@ public sealed class CommunicationsStartupHook : IStartupHook
     public int Priority => 0;
 
     /// <summary>
-    /// Executes Communications startup work.
+    /// Validates required Communications runtime dependencies.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A completed task.</returns>
-    public Task ExecuteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ExecuteAsync(CancellationToken cancellationToken)
+    {
+        _ = serviceProvider.GetRequiredService<INotificationSender>();
+        _ = serviceProvider.GetRequiredService<InMemoryFollowupScheduler>();
+        return Task.CompletedTask;
+    }
 }
