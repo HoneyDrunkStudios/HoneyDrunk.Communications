@@ -6,6 +6,11 @@ namespace HoneyDrunk.Communications.Abstractions;
 public enum MessageDecisionOutcome
 {
     /// <summary>
+    /// The message was approved for delivery, but delivery has not been attempted.
+    /// </summary>
+    Allowed,
+
+    /// <summary>
     /// The message was approved and sent through the delivery backend.
     /// </summary>
     Sent,

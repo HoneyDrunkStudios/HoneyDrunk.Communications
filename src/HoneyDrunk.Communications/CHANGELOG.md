@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Welcome flow runtime
+
+- Added the concrete `CommunicationOrchestrator` for the welcome-email flow.
+- Added in-memory preferences, cadence policy, follow-up scheduler, and decision log.
+- Added Notify.Abstractions integration through `INotificationSender`.
+- Added runtime options for welcome follow-up delay and scheduler interval.
+
 ## Unreleased - Kernel integration wiring
 
 - Added `CommunicationsOptions` and `AddCommunications(...)` service registration.
@@ -11,4 +18,3 @@
 
 - Created the empty runtime package scaffold.
 - Added package metadata and README/CHANGELOG files.
-
