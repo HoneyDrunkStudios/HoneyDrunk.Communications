@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/Docs/">
+    <File Path="README.md" />
+    <File Path="CHANGELOG.md" />
+  </Folder>
+  <Folder Name="/Pipelines/">
+    <File Path=".github/workflows/pr-core.yml" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <File Path="tests/.gitkeep" />
+  </Folder>
+  <Project Path="src/HoneyDrunk.Communications.Abstractions/HoneyDrunk.Communications.Abstractions.csproj" />
+  <Project Path="src/HoneyDrunk.Communications/HoneyDrunk.Communications.csproj" />
+</Solution>
