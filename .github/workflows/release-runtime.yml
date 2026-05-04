@@ -1,0 +1,57 @@
+name: Release Runtime
+
+on:
+  push:
+    tags:
+      - 'runtime-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (for example, 0.3.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Determine version
+        id: get_version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/runtime-v}"
+          fi
+          echo "version=$VERSION" >>"$GITHUB_OUTPUT"
+          echo "Publishing HoneyDrunk.Communications version: $VERSION"
+
+  release:
+    name: Build, Pack & Publish Runtime
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      security-events: write
+    uses: HoneyDrunkStudios/HoneyDrunk.Actions/.github/workflows/release.yml@main
+    with:
+      dotnet-version: '10.0.x'
+      configuration: 'Release'
+      runs-on: 'ubuntu-latest'
+      project-path: 'src/HoneyDrunk.Communications/HoneyDrunk.Communications.csproj'
+      package-version: ${{ needs.prepare.outputs.version }}
+      enable-nuget-publish: true
+      nuget-source: 'https://api.nuget.org/v3/index.json'
+      actions-ref: 'main'
+    secrets:
+      nuget-api-key: ${{ secrets.NUGET_API_KEY }}

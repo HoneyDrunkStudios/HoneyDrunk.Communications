@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - Runtime welcome-flow alignment
+
+- No breaking contract changes.
+- Version remains aligned with the unreleased package baseline.
+
 ## Unreleased - Phase 1 contract surface
 
 - Added `ICommunicationOrchestrator`, `IMessageIntent`, `IRecipientResolver`, `IPreferenceStore`, `ICadencePolicy`, and `ICommunicationDecisionLog`.
@@ -10,4 +15,3 @@
 
 - Created the empty Abstractions package scaffold.
 - Added package metadata and README/CHANGELOG files.
-

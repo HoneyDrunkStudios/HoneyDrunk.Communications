@@ -6,8 +6,10 @@
   <Folder Name="/Pipelines/">
     <File Path=".github/workflows/pr-core.yml" />
   </Folder>
+  <Folder Name="/src/" />
   <Folder Name="/Tests/">
     <File Path="tests/.gitkeep" />
+    <Project Path="tests/HoneyDrunk.Communications.Tests/HoneyDrunk.Communications.Tests.csproj" />
   </Folder>
   <Project Path="src/HoneyDrunk.Communications.Abstractions/HoneyDrunk.Communications.Abstractions.csproj" />
   <Project Path="src/HoneyDrunk.Communications/HoneyDrunk.Communications.csproj" />
