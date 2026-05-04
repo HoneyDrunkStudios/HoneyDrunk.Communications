@@ -48,11 +48,7 @@ public static class CommunicationsServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService>(provider => provider.GetRequiredService<InMemoryFollowupScheduler>()));
         services.TryAddSingleton<ICommunicationOrchestrator, CommunicationOrchestrator>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IStartupHook, CommunicationsStartupHook>());
-
-        if (HealthChecksEnabled(configure))
-        {
-            services.TryAddEnumerable(ServiceDescriptor.Singleton<IHealthContributor, CommunicationsHealthContributor>());
-        }
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHealthContributor, CommunicationsHealthContributor>());
 
         return services;
     }
@@ -64,17 +60,5 @@ public static class CommunicationsServiceCollectionExtensions
             throw new InvalidOperationException(
                 $"HoneyDrunk.Communications requires {typeof(TService).Name} to be registered before AddCommunications.");
         }
-    }
-
-    private static bool HealthChecksEnabled(Action<CommunicationsOptions>? configure)
-    {
-        if (configure is null)
-        {
-            return true;
-        }
-
-        var options = new CommunicationsOptions();
-        configure(options);
-        return options.EnableHealthChecks;
     }
 }

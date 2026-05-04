@@ -8,7 +8,8 @@ namespace HoneyDrunk.Communications.Internal;
 /// Startup hook that validates Communications runtime dependencies.
 /// </summary>
 /// <param name="serviceProvider">The service provider.</param>
-public sealed class CommunicationsStartupHook(IServiceProvider serviceProvider) : IStartupHook
+#pragma warning disable CA1812 // Registered through Microsoft.Extensions.DependencyInjection.
+internal sealed class CommunicationsStartupHook(IServiceProvider serviceProvider) : IStartupHook
 {
     /// <summary>
     /// Gets the startup hook priority.

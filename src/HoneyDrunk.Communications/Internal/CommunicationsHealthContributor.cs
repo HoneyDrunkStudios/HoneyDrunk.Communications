@@ -9,7 +9,8 @@ namespace HoneyDrunk.Communications.Internal;
 /// </summary>
 /// <param name="scheduler">The in-memory follow-up scheduler.</param>
 /// <param name="options">Communications options.</param>
-public sealed class CommunicationsHealthContributor(
+#pragma warning disable CA1812 // Registered through Microsoft.Extensions.DependencyInjection.
+internal sealed class CommunicationsHealthContributor(
     InMemoryFollowupScheduler scheduler,
     IOptionsMonitor<CommunicationsOptions> options) : IHealthContributor
 {
