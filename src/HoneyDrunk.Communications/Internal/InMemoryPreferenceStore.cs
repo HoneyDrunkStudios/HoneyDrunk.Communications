@@ -18,8 +18,15 @@ public sealed class InMemoryPreferenceStore : IPreferenceStore
     private readonly System.Collections.Concurrent.ConcurrentDictionary<PreferenceKey, RecipientPreferences> preferences = [];
 
     /// <inheritdoc />
-    public Task<RecipientPreferences> GetAsync(TenantId tenantId, RecipientHandle recipient, CancellationToken cancellationToken = default) =>
-        Task.FromResult(this.preferences.GetValueOrDefault(new PreferenceKey(tenantId, recipient.Identity), DefaultPreferences));
+    public Task<RecipientPreferences> GetAsync(TenantId tenantId, RecipientHandle recipient, CancellationToken cancellationToken = default)
+    {
+        if (IsInternalTenant(tenantId))
+        {
+            return Task.FromResult(DefaultPreferences);
+        }
+
+        return Task.FromResult(this.preferences.GetValueOrDefault(new PreferenceKey(tenantId, recipient.Identity), DefaultPreferences));
+    }
 
     /// <inheritdoc />
     public Task SetAsync(
@@ -28,9 +35,17 @@ public sealed class InMemoryPreferenceStore : IPreferenceStore
         RecipientPreferences preferences,
         CancellationToken cancellationToken = default)
     {
-        this.preferences[new PreferenceKey(tenantId, recipient.Identity)] = preferences;
+        if (!IsInternalTenant(tenantId))
+        {
+            this.preferences[new PreferenceKey(tenantId, recipient.Identity)] = preferences;
+        }
+
         return Task.CompletedTask;
     }
+
+    private static bool IsInternalTenant(TenantId tenantId) =>
+        string.Equals(tenantId.ToString(), "00000000000000000000000000", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(tenantId.ToString(), "internal", StringComparison.OrdinalIgnoreCase);
 
     private readonly record struct PreferenceKey(TenantId TenantId, string Identity);
 }

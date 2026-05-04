@@ -33,6 +33,9 @@ public static class CommunicationsServiceCollectionExtensions
         ValidateKernelService<ITelemetryActivityFactory>(services);
         ValidateKernelService<INotificationSender>(services);
 
+        var configuredOptions = new CommunicationsOptions();
+        configure?.Invoke(configuredOptions);
+
         services.AddOptions<CommunicationsOptions>();
 
         if (configure is not null)
@@ -48,7 +51,11 @@ public static class CommunicationsServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService>(provider => provider.GetRequiredService<InMemoryFollowupScheduler>()));
         services.TryAddSingleton<ICommunicationOrchestrator, CommunicationOrchestrator>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IStartupHook, CommunicationsStartupHook>());
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHealthContributor, CommunicationsHealthContributor>());
+
+        if (configuredOptions.EnableHealthChecks)
+        {
+            services.TryAddEnumerable(ServiceDescriptor.Singleton<IHealthContributor, CommunicationsHealthContributor>());
+        }
 
         return services;
     }

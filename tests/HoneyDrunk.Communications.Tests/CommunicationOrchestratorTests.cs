@@ -38,11 +38,11 @@ public sealed class CommunicationOrchestratorTests
     }
 
     /// <summary>
-    /// Verifies internal tenant handling short-circuits Notify delivery.
+    /// Verifies internal tenant handling bypasses preference and cadence enforcement while still exercising Notify delivery.
     /// </summary>
     /// <returns>A task that completes when the test finishes.</returns>
     [Fact]
-    public async Task Internal_tenant_short_circuits_notify_delivery()
+    public async Task Internal_tenant_bypasses_enforcement_but_still_delivers()
     {
         var sender = new FakeNotificationSender();
         var decisionLog = new InMemoryDecisionLog();
@@ -55,8 +55,8 @@ public sealed class CommunicationOrchestratorTests
         var decision = await orchestrator.SendAsync(intent);
 
         decision.Outcome.Should().Be(MessageDecisionOutcome.Sent);
-        sender.Envelopes.Should().BeEmpty();
-        decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == "internal");
+        sender.Envelopes.Should().ContainSingle();
+        decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == "00000000000000000000000000");
     }
 
     /// <summary>

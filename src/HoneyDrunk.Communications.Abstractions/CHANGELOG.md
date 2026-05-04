@@ -2,7 +2,7 @@
 
 ## Unreleased - Runtime welcome-flow alignment
 
-- No breaking contract changes.
+- Added `MessageDecisionOutcome.Allowed` so evaluation-only calls can report "would send" without claiming delivery occurred.
 - Version remains aligned with the unreleased package baseline.
 
 ## Unreleased - Phase 1 contract surface

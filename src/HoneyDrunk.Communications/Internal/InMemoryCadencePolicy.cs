@@ -18,6 +18,11 @@ public sealed class InMemoryCadencePolicy : ICadencePolicy
         IMessageIntent intent,
         CancellationToken cancellationToken = default)
     {
+        if (IsInternalTenant(tenantId))
+        {
+            return Task.FromResult(new CadenceVerdict(CadenceOutcome.Allow, DeferUntil: null, Reason: "internal-tenant-bypass"));
+        }
+
         if (intent.IntentKind is not WelcomeEmailIntent.Kind and not WelcomeFollowupIntent.Kind)
         {
             return Task.FromResult(new CadenceVerdict(CadenceOutcome.Allow, DeferUntil: null, Reason: "untracked-intent-kind"));
@@ -33,6 +38,10 @@ public sealed class InMemoryCadencePolicy : ICadencePolicy
 
         return Task.FromResult(new CadenceVerdict(CadenceOutcome.Suppress, DeferUntil: null, Reason: "already-sent"));
     }
+
+    private static bool IsInternalTenant(TenantId tenantId) =>
+        string.Equals(tenantId.ToString(), "00000000000000000000000000", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(tenantId.ToString(), "internal", StringComparison.OrdinalIgnoreCase);
 
     private readonly record struct CadenceKey(TenantId TenantId, string Identity, string IntentKind);
 }

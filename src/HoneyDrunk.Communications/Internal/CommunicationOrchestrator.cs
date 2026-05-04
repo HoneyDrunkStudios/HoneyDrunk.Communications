@@ -11,59 +11,73 @@ namespace HoneyDrunk.Communications.Internal;
 /// <summary>
 /// Default Communications orchestrator for the Phase 2 welcome flow.
 /// </summary>
-public sealed class CommunicationOrchestrator(
-    IRecipientResolver recipientResolver,
-    IPreferenceStore preferenceStore,
-    ICadencePolicy cadencePolicy,
-    INotificationSender notificationSender,
-    IDecisionLog decisionLog,
-    IGridContextAccessor gridContextAccessor,
-    ITelemetryActivityFactory telemetryActivityFactory,
-    InMemoryFollowupScheduler followupScheduler,
-    IOptionsMonitor<CommunicationsOptions> options) : ICommunicationOrchestrator
+public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
 {
+    private static readonly TenantId InternalTenantId = new("00000000000000000000000000");
+
+    private readonly IRecipientResolver recipientResolver;
+    private readonly IPreferenceStore preferenceStore;
+    private readonly ICadencePolicy cadencePolicy;
+    private readonly INotificationSender notificationSender;
+    private readonly IDecisionLog decisionLog;
+    private readonly IGridContextAccessor gridContextAccessor;
+    private readonly ITelemetryActivityFactory telemetryActivityFactory;
+    private readonly InMemoryFollowupScheduler followupScheduler;
+    private readonly IOptionsMonitor<CommunicationsOptions> options;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CommunicationOrchestrator"/> class.
+    /// </summary>
+    /// <param name="recipientResolver">Recipient resolver.</param>
+    /// <param name="preferenceStore">Preference store.</param>
+    /// <param name="cadencePolicy">Cadence policy.</param>
+    /// <param name="notificationSender">Notify sender boundary.</param>
+    /// <param name="decisionLog">Decision log.</param>
+    /// <param name="gridContextAccessor">Grid context accessor.</param>
+    /// <param name="telemetryActivityFactory">Telemetry activity factory.</param>
+    /// <param name="followupScheduler">Follow-up scheduler.</param>
+    /// <param name="options">Communications options.</param>
+    public CommunicationOrchestrator(
+        IRecipientResolver recipientResolver,
+        IPreferenceStore preferenceStore,
+        ICadencePolicy cadencePolicy,
+        INotificationSender notificationSender,
+        IDecisionLog decisionLog,
+        IGridContextAccessor gridContextAccessor,
+        ITelemetryActivityFactory telemetryActivityFactory,
+        InMemoryFollowupScheduler followupScheduler,
+        IOptionsMonitor<CommunicationsOptions> options)
+    {
+        this.recipientResolver = recipientResolver;
+        this.preferenceStore = preferenceStore;
+        this.cadencePolicy = cadencePolicy;
+        this.notificationSender = notificationSender;
+        this.decisionLog = decisionLog;
+        this.gridContextAccessor = gridContextAccessor;
+        this.telemetryActivityFactory = telemetryActivityFactory;
+        this.followupScheduler = followupScheduler;
+        this.options = options;
+        this.followupScheduler.ConfigureDispatcher(this.DispatchScheduledFollowupAsync);
+    }
+
     /// <inheritdoc />
     public async Task<MessageDecision> EvaluateAsync(IMessageIntent intent, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(intent);
 
-        var gridContext = gridContextAccessor.GridContext;
-        var tenantIdText = GetTenantIdText(gridContext);
+        var gridContext = this.gridContextAccessor.GridContext;
+        var tenantId = GetTenantId(gridContext);
 
-        using var activity = telemetryActivityFactory.Start(
+        using var activity = this.telemetryActivityFactory.Start(
             "communications.evaluate",
             new Dictionary<string, object?>
             {
-                ["tenant_id"] = tenantIdText,
+                ["tenant_id"] = tenantId.ToString(),
                 ["communications.intent_kind"] = intent.IntentKind,
             });
 
-        var recipient = await this.ResolveFirstRecipientAsync(intent, cancellationToken).ConfigureAwait(false);
-
-        if (IsInternalTenant(tenantIdText))
-        {
-            return new MessageDecision(MessageDecisionOutcome.Sent, "internal-tenant-bypass", CorrelationKey: gridContext.CorrelationId);
-        }
-
-        var tenantId = new TenantId(tenantIdText);
-        var preferences = await preferenceStore.GetAsync(tenantId, recipient, cancellationToken).ConfigureAwait(false);
-        if (preferences.OptedOut || preferences.SuppressedIntentKinds.Contains(intent.IntentKind))
-        {
-            return new MessageDecision(MessageDecisionOutcome.SuppressedByPreference, "recipient-preference", CorrelationKey: gridContext.CorrelationId);
-        }
-
-        var cadence = await cadencePolicy.CheckAsync(tenantId, recipient, intent, cancellationToken).ConfigureAwait(false);
-        if (cadence.Outcome is CadenceOutcome.Allow)
-        {
-            return new MessageDecision(MessageDecisionOutcome.Sent, cadence.Reason, CorrelationKey: gridContext.CorrelationId);
-        }
-
-        if (cadence.Outcome is CadenceOutcome.Defer)
-        {
-            return new MessageDecision(MessageDecisionOutcome.Scheduled, cadence.Reason, cadence.DeferUntil, gridContext.CorrelationId);
-        }
-
-        return new MessageDecision(MessageDecisionOutcome.SuppressedByCadence, cadence.Reason, CorrelationKey: gridContext.CorrelationId);
+        var recipient = await this.ResolveRecipientsAsync(intent, cancellationToken).ConfigureAwait(false);
+        return await this.EvaluateRecipientAsync(intent, recipient[0], tenantId, gridContext.CorrelationId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -71,92 +85,157 @@ public sealed class CommunicationOrchestrator(
     {
         ArgumentNullException.ThrowIfNull(intent);
 
-        var gridContext = gridContextAccessor.GridContext;
-        var tenantIdText = GetTenantIdText(gridContext);
+        var gridContext = this.gridContextAccessor.GridContext;
+        var tenantId = GetTenantId(gridContext);
 
-        using var activity = telemetryActivityFactory.Start(
+        using var activity = this.telemetryActivityFactory.Start(
             "communications.send",
             new Dictionary<string, object?>
             {
-                ["tenant_id"] = tenantIdText,
+                ["tenant_id"] = tenantId.ToString(),
                 ["communications.intent_kind"] = intent.IntentKind,
             });
 
-        var decision = await this.EvaluateAsync(intent, cancellationToken).ConfigureAwait(false);
-        if (decision.Outcome is MessageDecisionOutcome.Sent && !IsInternalTenant(tenantIdText))
+        return await this.SendCoreAsync(intent, tenantId, gridContext, scheduleFollowup: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static TenantId GetTenantId(IGridContext gridContext)
+    {
+        var tenantIdText = gridContext.TenantId?.ToString();
+        if (string.IsNullOrWhiteSpace(tenantIdText) || string.Equals(tenantIdText, "internal", StringComparison.OrdinalIgnoreCase))
         {
-            var envelope = this.CreateEnvelope(intent, gridContext, tenantIdText);
-            var outcome = await notificationSender.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
-            if (outcome.Status is not DeliveryStatus.Succeeded and not DeliveryStatus.Deferred)
+            return InternalTenantId;
+        }
+
+        return TenantId.TryParse(tenantIdText, out var tenantId) ? tenantId : InternalTenantId;
+    }
+
+    private async Task<MessageDecision> SendCoreAsync(
+        IMessageIntent intent,
+        TenantId tenantId,
+        IGridContext gridContext,
+        bool scheduleFollowup,
+        CancellationToken cancellationToken)
+    {
+        var recipients = await this.ResolveRecipientsAsync(intent, cancellationToken).ConfigureAwait(false);
+        MessageDecision? result = null;
+
+        foreach (var recipient in recipients)
+        {
+            var decision = await this.EvaluateRecipientAsync(intent, recipient, tenantId, gridContext.CorrelationId, cancellationToken).ConfigureAwait(false);
+            if (decision.Outcome is MessageDecisionOutcome.Allowed)
             {
-                decision = new MessageDecision(MessageDecisionOutcome.Failed, outcome.ErrorMessage ?? "notify-delivery-failed", CorrelationKey: gridContext.CorrelationId);
+                var envelope = this.CreateEnvelope(intent, recipient, gridContext, tenantId);
+                var outcome = await this.notificationSender.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
+                decision = outcome.Status is DeliveryStatus.Succeeded or DeliveryStatus.Deferred
+                    ? new MessageDecision(MessageDecisionOutcome.Sent, outcome.Status.ToString(), CorrelationKey: gridContext.CorrelationId)
+                    : new MessageDecision(MessageDecisionOutcome.Failed, outcome.ErrorMessage ?? "notify-delivery-failed", CorrelationKey: gridContext.CorrelationId);
+
+                if (decision.Outcome is MessageDecisionOutcome.Sent && scheduleFollowup && intent is WelcomeEmailIntent welcomeEmailIntent)
+                {
+                    this.ScheduleWelcomeFollowup(tenantId, welcomeEmailIntent, recipient, gridContext.CorrelationId);
+                }
             }
-            else if (intent is WelcomeEmailIntent welcomeEmailIntent)
+
+            this.decisionLog.Append(new DecisionLogEntry(
+                Guid.NewGuid(),
+                DateTimeOffset.UtcNow,
+                tenantId.ToString(),
+                intent.IntentKind,
+                recipient,
+                decision,
+                gridContext.CorrelationId));
+
+            result ??= decision;
+            if (decision.Outcome is MessageDecisionOutcome.Failed)
             {
-                this.ScheduleWelcomeFollowup(new TenantId(tenantIdText), welcomeEmailIntent, gridContext.CorrelationId);
+                result = decision;
             }
         }
 
-        var recipient = await this.ResolveFirstRecipientAsync(intent, cancellationToken).ConfigureAwait(false);
-        decisionLog.Append(new DecisionLogEntry(
-            Guid.NewGuid(),
-            DateTimeOffset.UtcNow,
-            tenantIdText,
-            intent.IntentKind,
-            recipient,
-            decision,
-            gridContext.CorrelationId));
-
-        return decision;
+        return result ?? new MessageDecision(MessageDecisionOutcome.Failed, "no-recipient", CorrelationKey: gridContext.CorrelationId);
     }
 
-    private static bool IsInternalTenant(string tenantId) =>
-        string.Equals(tenantId, "internal", StringComparison.OrdinalIgnoreCase);
-
-    private static string GetTenantIdText(IGridContext gridContext) =>
-        string.IsNullOrWhiteSpace(gridContext.TenantId) ? "internal" : gridContext.TenantId;
-
-    private async Task<RecipientHandle> ResolveFirstRecipientAsync(IMessageIntent intent, CancellationToken cancellationToken)
+    private async Task<MessageDecision> EvaluateRecipientAsync(
+        IMessageIntent intent,
+        RecipientHandle recipient,
+        TenantId tenantId,
+        string correlationId,
+        CancellationToken cancellationToken)
     {
-        await foreach (var recipient in recipientResolver.ResolveAsync(intent, cancellationToken).ConfigureAwait(false))
+        var preferences = await this.preferenceStore.GetAsync(tenantId, recipient, cancellationToken).ConfigureAwait(false);
+        if (preferences.OptedOut || preferences.SuppressedIntentKinds.Contains(intent.IntentKind))
         {
-            return recipient;
+            return new MessageDecision(MessageDecisionOutcome.SuppressedByPreference, "recipient-preference", CorrelationKey: correlationId);
         }
 
-        return intent.Recipient;
+        var cadence = await this.cadencePolicy.CheckAsync(tenantId, recipient, intent, cancellationToken).ConfigureAwait(false);
+        if (cadence.Outcome is CadenceOutcome.Allow)
+        {
+            return new MessageDecision(MessageDecisionOutcome.Allowed, cadence.Reason, CorrelationKey: correlationId);
+        }
+
+        if (cadence.Outcome is CadenceOutcome.Defer)
+        {
+            return new MessageDecision(MessageDecisionOutcome.Scheduled, cadence.Reason, cadence.DeferUntil, correlationId);
+        }
+
+        return new MessageDecision(MessageDecisionOutcome.SuppressedByCadence, cadence.Reason, CorrelationKey: correlationId);
     }
 
-    private NotificationEnvelope CreateEnvelope(IMessageIntent intent, IGridContext gridContext, string tenantId)
+    private async Task<IReadOnlyList<RecipientHandle>> ResolveRecipientsAsync(IMessageIntent intent, CancellationToken cancellationToken)
     {
-        var channel = string.Equals(intent.Recipient.PreferredChannel, "sms", StringComparison.OrdinalIgnoreCase)
+        var recipients = new List<RecipientHandle>();
+        await foreach (var recipient in this.recipientResolver.ResolveAsync(intent, cancellationToken).ConfigureAwait(false))
+        {
+            recipients.Add(recipient);
+        }
+
+        if (recipients.Count == 0)
+        {
+            recipients.Add(intent.Recipient);
+        }
+
+        return recipients;
+    }
+
+    private NotificationEnvelope CreateEnvelope(IMessageIntent intent, RecipientHandle recipient, IGridContext gridContext, TenantId tenantId)
+    {
+        var channel = string.Equals(recipient.PreferredChannel, "sms", StringComparison.OrdinalIgnoreCase)
             ? NotificationChannel.Sms
             : NotificationChannel.Email;
 
         return new NotificationEnvelope(
             NotificationId.NewId(),
             channel,
-            new Recipient(channel, intent.Recipient.Identity),
+            new Recipient(channel, recipient.Identity),
             new TemplateKey(intent.IntentKind),
             intent.Payload.ToDictionary(pair => pair.Key, pair => (object?)pair.Value, StringComparer.Ordinal))
         {
             CorrelationId = gridContext.CorrelationId,
             CausationId = gridContext.CausationId,
             NodeId = gridContext.NodeId,
-            TenantId = tenantId,
+            TenantId = tenantId.ToString(),
             Environment = gridContext.Environment,
             CreatedAtUtc = DateTimeOffset.UtcNow,
             Tags = ["communications", intent.IntentKind],
         };
     }
 
-    private void ScheduleWelcomeFollowup(TenantId tenantId, WelcomeEmailIntent intent, string correlationId)
+    private void ScheduleWelcomeFollowup(TenantId tenantId, WelcomeEmailIntent intent, RecipientHandle recipient, string correlationId)
     {
         var followup = new WelcomeFollowupIntent(
-            intent.Recipient,
+            recipient,
             $"{intent.TriggerEventId}:followup",
             correlationId,
             intent.Payload);
 
-        followupScheduler.Schedule(tenantId, followup, DateTimeOffset.UtcNow + options.CurrentValue.WelcomeFollowupDelay);
+        this.followupScheduler.Schedule(tenantId, followup, DateTimeOffset.UtcNow + this.options.CurrentValue.WelcomeFollowupDelay);
+    }
+
+    private Task DispatchScheduledFollowupAsync(InMemoryFollowupScheduler.ScheduledFollowup followup, CancellationToken cancellationToken)
+    {
+        var gridContext = this.gridContextAccessor.GridContext;
+        return this.SendCoreAsync(followup.Intent, followup.TenantId, gridContext, scheduleFollowup: false, cancellationToken);
     }
 }
