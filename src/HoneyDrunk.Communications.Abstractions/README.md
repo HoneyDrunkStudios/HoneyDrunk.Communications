@@ -1,13 +1,27 @@
 # HoneyDrunk.Communications.Abstractions
 
-Pure contract package for HoneyDrunk.Communications.
+Contract package for the Grid communications decision layer.
 
-This package intentionally has no public types yet. Phase 1 adds the seed contracts for orchestration, recipient resolution, preference evaluation, cadence policy, and decision logging.
+## Public surface
 
-## Installation
+- `ICommunicationOrchestrator` — evaluates and sends communication intents.
+- `IMessageIntent` / `MessageIntent` — describes the business event, recipient, and payload.
+- `IRecipientResolver` — resolves one or more recipients for an intent.
+- `IPreferenceStore` — tenant-scoped recipient preference lookups and updates.
+- `ICadencePolicy` — tenant-scoped cadence checks.
+- `ICommunicationDecisionLog` — append-only audit surface for send-or-suppress decisions.
+- Supporting records/enums: `RecipientHandle`, `RecipientPreferences`, `MessageDecision`, `MessageDecisionOutcome`, `CadenceVerdict`, `CadenceOutcome`, `CommunicationDecisionLogEntry`.
 
-This package is not published yet.
+Tenancy uses `HoneyDrunk.Kernel.Abstractions.Identity.TenantId`. Communications does not define a parallel tenant primitive or accept string-shaped tenant identifiers.
 
-## Public API Surface
+## Example
 
-None yet.
+```csharp
+var intent = new MessageIntent(
+    IntentKind: "welcome-email",
+    TriggerEventId: userSignedUpEventId,
+    Recipient: new RecipientHandle(userId, "email"),
+    Payload: new Dictionary<string, string> { ["displayName"] = displayName });
+
+MessageDecision decision = await orchestrator.EvaluateAsync(intent, cancellationToken);
+```
