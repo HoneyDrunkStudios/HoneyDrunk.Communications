@@ -9,11 +9,12 @@ namespace HoneyDrunk.Communications.Internal;
 internal static class InternalTenant
 {
     private const string InternalAlias = "internal";
+    private const string InternalTenantIdText = "00000000000000000000000000";
 
     /// <summary>
     /// Gets the canonical internal tenant identifier used when no external tenant is present.
     /// </summary>
-    internal static TenantId Id { get; } = new("00000000000000000000000000");
+    internal static TenantId Id { get; } = new(InternalTenantIdText);
 
     /// <summary>
     /// Returns a tenant identifier from Grid context, defaulting malformed or missing tenant values to the internal tenant.
@@ -39,7 +40,7 @@ internal static class InternalTenant
     internal static bool IsInternal(TenantId tenantId)
     {
         var tenantIdText = tenantId.ToString();
-        return string.Equals(tenantIdText, Id.ToString(), StringComparison.OrdinalIgnoreCase)
+        return string.Equals(tenantIdText, InternalTenantIdText, StringComparison.Ordinal)
             || string.Equals(tenantIdText, InternalAlias, StringComparison.OrdinalIgnoreCase);
     }
 }
