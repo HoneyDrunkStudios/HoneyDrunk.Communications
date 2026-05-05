@@ -20,7 +20,7 @@ public sealed class InMemoryPreferenceStore : IPreferenceStore
     /// <inheritdoc />
     public Task<RecipientPreferences> GetAsync(TenantId tenantId, RecipientHandle recipient, CancellationToken cancellationToken = default)
     {
-        if (IsInternalTenant(tenantId))
+        if (InternalTenant.IsInternal(tenantId))
         {
             return Task.FromResult(DefaultPreferences);
         }
@@ -35,17 +35,13 @@ public sealed class InMemoryPreferenceStore : IPreferenceStore
         RecipientPreferences preferences,
         CancellationToken cancellationToken = default)
     {
-        if (!IsInternalTenant(tenantId))
+        if (!InternalTenant.IsInternal(tenantId))
         {
             this.preferences[new PreferenceKey(tenantId, recipient.Identity)] = preferences;
         }
 
         return Task.CompletedTask;
     }
-
-    private static bool IsInternalTenant(TenantId tenantId) =>
-        string.Equals(tenantId.ToString(), "00000000000000000000000000", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(tenantId.ToString(), "internal", StringComparison.OrdinalIgnoreCase);
 
     private readonly record struct PreferenceKey(TenantId TenantId, string Identity);
 }

@@ -4,6 +4,7 @@
 
 - Added the concrete welcome-email `ICommunicationOrchestrator` runtime path.
 - Added in-memory preference, cadence, follow-up scheduling, and append-only decision-log services.
+- Consolidated internal-tenant detection across in-memory preference and cadence enforcement.
 - Added `WelcomeEmailIntent` and `WelcomeFollowupIntent` plus Notify.Abstractions delegation.
 - Added Phase 2 tests for tenant isolation, internal tenant short-circuiting, and the Notify boundary canary.
 - Added the tag-driven runtime release workflow.

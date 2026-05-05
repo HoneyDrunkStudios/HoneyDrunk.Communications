@@ -13,8 +13,6 @@ namespace HoneyDrunk.Communications.Internal;
 /// </summary>
 public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
 {
-    private static readonly TenantId InternalTenantId = new("00000000000000000000000000");
-
     private readonly IRecipientResolver recipientResolver;
     private readonly IPreferenceStore preferenceStore;
     private readonly ICadencePolicy cadencePolicy;
@@ -66,7 +64,7 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
         ArgumentNullException.ThrowIfNull(intent);
 
         var gridContext = this.gridContextAccessor.GridContext;
-        var tenantId = GetTenantId(gridContext);
+        var tenantId = InternalTenant.FromContext(gridContext);
 
         using var activity = this.telemetryActivityFactory.Start(
             "communications.evaluate",
@@ -86,7 +84,7 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
         ArgumentNullException.ThrowIfNull(intent);
 
         var gridContext = this.gridContextAccessor.GridContext;
-        var tenantId = GetTenantId(gridContext);
+        var tenantId = InternalTenant.FromContext(gridContext);
 
         using var activity = this.telemetryActivityFactory.Start(
             "communications.send",
@@ -97,17 +95,6 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
             });
 
         return await this.SendCoreAsync(intent, tenantId, gridContext, scheduleFollowup: true, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static TenantId GetTenantId(IGridContext gridContext)
-    {
-        var tenantIdText = gridContext.TenantId?.ToString();
-        if (string.IsNullOrWhiteSpace(tenantIdText) || string.Equals(tenantIdText, "internal", StringComparison.OrdinalIgnoreCase))
-        {
-            return InternalTenantId;
-        }
-
-        return TenantId.TryParse(tenantIdText, out var tenantId) ? tenantId : InternalTenantId;
     }
 
     private async Task<MessageDecision> SendCoreAsync(
