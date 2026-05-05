@@ -4,7 +4,7 @@ HoneyDrunk.Communications is the Grid's tenant-aware orchestration layer for out
 
 ## Status
 
-Seed runtime. Phase 1 defines the contract surface and Kernel integration. Phase 2 adds the first concrete welcome-email path with in-memory preferences, cadence, decision logging, and Notify.Abstractions delegation.
+Seed runtime ready for the `0.1.0` package release. The first cut includes the contract surface, Kernel integration, and a concrete welcome-email path with in-memory preferences, cadence, decision logging, and Notify.Abstractions delegation.
 
 ## Packages
 
