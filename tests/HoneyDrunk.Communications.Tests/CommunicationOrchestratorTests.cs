@@ -60,6 +60,42 @@ public sealed class CommunicationOrchestratorTests
     }
 
     /// <summary>
+    /// Verifies the internal tenant bypass is shared by cadence and preference stores.
+    /// </summary>
+    /// <returns>A task that completes when the test finishes.</returns>
+    [Fact]
+    public async Task Internal_tenant_bypass_is_shared_by_cadence_and_preferences()
+    {
+        var tenantId = new TenantId("00000000000000000000000000");
+        var recipient = new RecipientHandle("user@example.com", "email");
+        var intent = new WelcomeEmailIntent(recipient, "signup-1", new Dictionary<string, string>());
+        var cadencePolicy = new InMemoryCadencePolicy();
+        var preferenceStore = new InMemoryPreferenceStore();
+
+        await preferenceStore.SetAsync(
+            tenantId,
+            recipient,
+            new RecipientPreferences(
+                OptedOut: true,
+                SuppressedIntentKinds: new HashSet<string>(StringComparer.Ordinal) { intent.IntentKind },
+                QuietHoursStart: null,
+                QuietHoursEnd: null,
+                PreferredChannel: "sms"));
+
+        var preferences = await preferenceStore.GetAsync(tenantId, recipient);
+        var firstCadence = await cadencePolicy.CheckAsync(tenantId, recipient, intent);
+        var duplicateCadence = await cadencePolicy.CheckAsync(tenantId, recipient, intent);
+
+        preferences.OptedOut.Should().BeFalse();
+        preferences.SuppressedIntentKinds.Should().BeEmpty();
+        preferences.PreferredChannel.Should().BeNull();
+        firstCadence.Outcome.Should().Be(CadenceOutcome.Allow);
+        firstCadence.Reason.Should().Be("internal-tenant-bypass");
+        duplicateCadence.Outcome.Should().Be(CadenceOutcome.Allow);
+        duplicateCadence.Reason.Should().Be("internal-tenant-bypass");
+    }
+
+    /// <summary>
     /// Verifies the Notify boundary receives the expected welcome-email envelope.
     /// </summary>
     /// <returns>A task that completes when the test finishes.</returns>

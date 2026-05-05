@@ -4,6 +4,7 @@
 
 - Added the concrete `CommunicationOrchestrator` for the welcome-email flow.
 - Added in-memory preferences, cadence policy, follow-up scheduler, and decision log.
+- Consolidated internal-tenant detection across in-memory preference and cadence enforcement.
 - Added Notify.Abstractions integration through `INotificationSender`.
 - Added runtime options for welcome follow-up delay and scheduler interval.
 
