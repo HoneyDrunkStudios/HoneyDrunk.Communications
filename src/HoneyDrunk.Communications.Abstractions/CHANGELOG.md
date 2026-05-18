@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 - 2026-05-18
+
+- Updated `HoneyDrunk.Kernel.Abstractions` to 0.7.0 so Communications contracts use the current canonical `TenantId` primitive.
+
 ## 0.1.0 - Initial release
 
 - Created the Abstractions package scaffold with package metadata and README/CHANGELOG files.

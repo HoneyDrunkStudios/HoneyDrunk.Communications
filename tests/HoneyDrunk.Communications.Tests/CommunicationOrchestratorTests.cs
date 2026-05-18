@@ -6,6 +6,7 @@ using HoneyDrunk.Kernel.Abstractions.Context;
 using HoneyDrunk.Kernel.Abstractions.Identity;
 using HoneyDrunk.Kernel.Abstractions.Telemetry;
 using HoneyDrunk.Notify.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace HoneyDrunk.Communications.Tests;
@@ -46,7 +47,7 @@ public sealed class CommunicationOrchestratorTests
     {
         var sender = new FakeNotificationSender();
         var decisionLog = new InMemoryDecisionLog();
-        var orchestrator = CreateOrchestrator("internal", sender, decisionLog);
+        var orchestrator = CreateOrchestrator(TenantId.Internal, sender, decisionLog);
         var intent = new WelcomeEmailIntent(
             new RecipientHandle("user@example.com", "email"),
             "signup-1",
@@ -56,7 +57,7 @@ public sealed class CommunicationOrchestratorTests
 
         decision.Outcome.Should().Be(MessageDecisionOutcome.Sent);
         sender.Envelopes.Should().ContainSingle();
-        decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == "00000000000000000000000000");
+        decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == TenantId.Internal.ToString());
     }
 
     /// <summary>
@@ -66,7 +67,7 @@ public sealed class CommunicationOrchestratorTests
     [Fact]
     public async Task Internal_tenant_bypass_is_shared_by_cadence_and_preferences()
     {
-        var tenantId = new TenantId("00000000000000000000000000");
+        var tenantId = TenantId.Internal;
         var recipient = new RecipientHandle("user@example.com", "email");
         var intent = new WelcomeEmailIntent(recipient, "signup-1", new Dictionary<string, string>());
         var cadencePolicy = new InMemoryCadencePolicy();
@@ -96,13 +97,46 @@ public sealed class CommunicationOrchestratorTests
     }
 
     /// <summary>
+    /// Verifies Communications runtime registration only requires Kernel abstractions and Notify contracts.
+    /// </summary>
+    [Fact]
+    public void AddCommunications_registers_runtime_when_required_contracts_are_present()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IGridContextAccessor>(new FakeGridContextAccessor(new FakeGridContext(TenantId.Internal)));
+        services.AddSingleton<IOperationContextAccessor>(new FakeOperationContextAccessor());
+        services.AddSingleton<ITelemetryActivityFactory, FakeTelemetryActivityFactory>();
+        services.AddSingleton<INotificationSender, FakeNotificationSender>();
+
+        services.AddCommunications(options => options.EnableHealthChecks = false);
+
+        services.Should().Contain(service => service.ServiceType == typeof(ICommunicationOrchestrator));
+    }
+
+    /// <summary>
+    /// Verifies AddCommunications fails fast when the Notify delivery boundary is missing.
+    /// </summary>
+    [Fact]
+    public void AddCommunications_requires_notify_sender_boundary()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IGridContextAccessor>(new FakeGridContextAccessor(new FakeGridContext(TenantId.Internal)));
+        services.AddSingleton<IOperationContextAccessor>(new FakeOperationContextAccessor());
+        services.AddSingleton<ITelemetryActivityFactory, FakeTelemetryActivityFactory>();
+
+        var act = () => services.AddCommunications();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*INotificationSender*");
+    }
+
+    /// <summary>
     /// Verifies the Notify boundary receives the expected welcome-email envelope.
     /// </summary>
     /// <returns>A task that completes when the test finishes.</returns>
     [Fact]
     public async Task Welcome_email_is_sent_through_notify_boundary()
     {
-        var tenantId = TenantId.NewId().ToString();
+        var tenantId = TenantId.NewId();
         var sender = new FakeNotificationSender();
         var decisionLog = new InMemoryDecisionLog();
         var orchestrator = CreateOrchestrator(tenantId, sender, decisionLog);
@@ -119,13 +153,18 @@ public sealed class CommunicationOrchestratorTests
         envelope.Channel.Should().Be(NotificationChannel.Email);
         envelope.Recipient.Address.Should().Be("user@example.com");
         envelope.TemplateKey.ToString().Should().Be(WelcomeEmailIntent.Kind);
-        envelope.TenantId.Should().Be(tenantId);
+        envelope.CorrelationId.Should().Be("corr-1");
+        envelope.CausationId.Should().Be("cause-1");
+        envelope.NodeId.Should().Be("honeydrunk-communications");
+        envelope.Environment.Should().Be("test");
+        envelope.TenantId.Should().Be(tenantId.ToString());
         envelope.Tags.Should().Contain(WelcomeEmailIntent.Kind);
-        decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == tenantId);
+        decisionLog.Entries.Should().ContainSingle(entry =>
+            entry.TenantId == tenantId.ToString() && entry.CorrelationId == "corr-1");
     }
 
     private static CommunicationOrchestrator CreateOrchestrator(
-        string tenantId,
+        TenantId tenantId,
         FakeNotificationSender sender,
         InMemoryDecisionLog decisionLog)
     {
@@ -166,7 +205,12 @@ public sealed class CommunicationOrchestratorTests
         public IGridContext GridContext { get; } = gridContext;
     }
 
-    private sealed class FakeGridContext(string tenantId) : IGridContext
+    private sealed class FakeOperationContextAccessor : IOperationContextAccessor
+    {
+        public IOperationContext? Current { get; set; }
+    }
+
+    private sealed class FakeGridContext(TenantId tenantId) : IGridContext
     {
         public bool IsInitialized => true;
 
@@ -174,13 +218,13 @@ public sealed class CommunicationOrchestratorTests
 
         public string? CausationId { get; } = "cause-1";
 
-        public string NodeId { get; } = "communications";
+        public string NodeId { get; } = "honeydrunk-communications";
 
         public string StudioId { get; } = "honeydrunk";
 
         public string Environment { get; } = "test";
 
-        public string? TenantId { get; } = tenantId;
+        public TenantId TenantId { get; } = tenantId;
 
         public string? ProjectId { get; }
 

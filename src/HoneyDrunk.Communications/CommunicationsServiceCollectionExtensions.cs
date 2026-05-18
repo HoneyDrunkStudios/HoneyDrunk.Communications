@@ -28,10 +28,10 @@ public static class CommunicationsServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        ValidateKernelService<IGridContextAccessor>(services);
-        ValidateKernelService<IOperationContextAccessor>(services);
-        ValidateKernelService<ITelemetryActivityFactory>(services);
-        ValidateKernelService<INotificationSender>(services);
+        ValidateRequiredService<IGridContextAccessor>(services);
+        ValidateRequiredService<IOperationContextAccessor>(services);
+        ValidateRequiredService<ITelemetryActivityFactory>(services);
+        ValidateRequiredService<INotificationSender>(services);
 
         var configuredOptions = new CommunicationsOptions();
         configure?.Invoke(configuredOptions);
@@ -48,7 +48,7 @@ public static class CommunicationsServiceCollectionExtensions
         services.TryAddSingleton<ICadencePolicy, InMemoryCadencePolicy>();
         services.TryAddSingleton<IDecisionLog, InMemoryDecisionLog>();
         services.TryAddSingleton<InMemoryFollowupScheduler>();
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService>(provider => provider.GetRequiredService<InMemoryFollowupScheduler>()));
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, FollowupSchedulerHostedService>());
         services.TryAddSingleton<ICommunicationOrchestrator, CommunicationOrchestrator>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IStartupHook, CommunicationsStartupHook>());
 
@@ -60,7 +60,7 @@ public static class CommunicationsServiceCollectionExtensions
         return services;
     }
 
-    private static void ValidateKernelService<TService>(IServiceCollection services)
+    private static void ValidateRequiredService<TService>(IServiceCollection services)
     {
         if (!services.Any(service => service.ServiceType == typeof(TService)))
         {
