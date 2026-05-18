@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 - 2026-05-18
+
+- Removed the full `HoneyDrunk.Kernel` package dependency; the runtime now consumes Kernel contracts through `HoneyDrunk.Kernel.Abstractions` only.
+- Updated `HoneyDrunk.Kernel.Abstractions` to 0.7.0 and `HoneyDrunk.Notify.Abstractions` to 0.3.0.
+- Preserved `AddCommunications(...)` validation for required Grid context, operation context, telemetry, and Notify sender registrations.
+- Added a hosted-service adapter so the singleton follow-up scheduler is registered through a concrete `IHostedService` implementation.
+- Added tests for runtime registration with Kernel abstractions-only prerequisites and fail-fast Notify boundary validation.
+
 ## 0.1.0 - Initial release
 
 - Created the runtime package scaffold with package metadata and README/CHANGELOG files.

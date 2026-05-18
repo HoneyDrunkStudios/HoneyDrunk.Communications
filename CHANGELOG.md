@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 - 2026-05-18
+
+- Removed the unnecessary full `HoneyDrunk.Kernel` runtime dependency from the Communications runtime package.
+- Updated Communications packages to consume `HoneyDrunk.Kernel.Abstractions` 0.7.0 for the current Kernel context contract.
+- Updated the runtime Notify boundary dependency to `HoneyDrunk.Notify.Abstractions` 0.3.0.
+- Kept `AddCommunications(...)` fail-fast validation for required Kernel abstractions and `INotificationSender` registration.
+- Added a hosted-service adapter so the singleton follow-up scheduler registers cleanly as `IHostedService`.
+- Added registration tests covering abstractions-only Kernel prerequisites and the Notify sender boundary.
+- Aligned the solution package version to 0.2.0.
+
 ## 0.1.0 - Initial release
 
 - Created the HoneyDrunk.Communications solution scaffold.
