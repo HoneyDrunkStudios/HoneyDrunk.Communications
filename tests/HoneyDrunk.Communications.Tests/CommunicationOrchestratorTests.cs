@@ -57,7 +57,7 @@ public sealed class CommunicationOrchestratorTests
 
         decision.Outcome.Should().Be(MessageDecisionOutcome.Sent);
         sender.Envelopes.Should().ContainSingle();
-        decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == "00000000000000000000000000");
+        decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == TenantId.Internal.ToString());
     }
 
     /// <summary>
