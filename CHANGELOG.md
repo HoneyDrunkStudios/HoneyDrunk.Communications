@@ -4,7 +4,7 @@
 
 ### Internal
 
-- Backfilled Communications test coverage to 83.4% and seeded the Grid PR coverage gate baseline.
+- Backfilled Communications test coverage to 83.4% and seeded the Grid PR coverage gate baseline at 83.3% to avoid rounded-threshold drift.
 - Split PR validation from the default-branch coverage baseline ratchet so pull requests keep read-only contents permissions.
 
 ## 0.2.0 - 2026-05-18
