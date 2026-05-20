@@ -43,7 +43,7 @@ public sealed class CommunicationsRuntimeBackfillTests
         stoppedHealth.status.Should().Be(HealthStatus.Degraded);
         stoppedHealth.message.Should().Be("Follow-up scheduler has not started.");
 
-        var hostedService = provider.GetRequiredService<IEnumerable<IHostedService>>().Should().ContainSingle().Subject;
+        var hostedService = GetFollowupSchedulerHostedService(provider);
         await hostedService.StartAsync(CancellationToken.None);
         try
         {
@@ -79,7 +79,7 @@ public sealed class CommunicationsRuntimeBackfillTests
                 options.FollowupSchedulerInterval = TimeSpan.FromMilliseconds(10);
             });
 
-        var hostedService = provider.GetRequiredService<IEnumerable<IHostedService>>().Should().ContainSingle().Subject;
+        var hostedService = GetFollowupSchedulerHostedService(provider);
         await hostedService.StartAsync(CancellationToken.None);
         try
         {
@@ -137,6 +137,14 @@ public sealed class CommunicationsRuntimeBackfillTests
         entry.Recipient.PreferredChannel.Should().Be("sms");
         entry.Decision.Should().Be(decision);
         entry.CorrelationId.Should().Be("corr-1");
+    }
+
+    private static IHostedService GetFollowupSchedulerHostedService(IServiceProvider provider)
+    {
+        return provider.GetRequiredService<IEnumerable<IHostedService>>()
+            .Should()
+            .ContainSingle(service => service.GetType().Name == "FollowupSchedulerHostedService")
+            .Subject;
     }
 
     private static ServiceProvider BuildProvider(
