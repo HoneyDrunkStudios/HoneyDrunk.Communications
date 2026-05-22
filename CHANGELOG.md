@@ -4,6 +4,8 @@
 
 ### Internal
 
+- Migrated Communications tests to AwesomeAssertions and refreshed HoneyDrunk.Standards to 0.2.8.
+
 - Backfilled Communications test coverage to 83.4% and seeded the Grid PR coverage gate baseline at 83.3% to avoid rounded-threshold drift.
 - Split PR validation from the default-branch coverage baseline ratchet so pull requests keep read-only contents permissions.
 

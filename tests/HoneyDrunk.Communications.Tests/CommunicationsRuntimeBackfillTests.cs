@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using HoneyDrunk.Communications.Abstractions;
 using HoneyDrunk.Communications.Intents;
 using HoneyDrunk.Kernel.Abstractions.Context;
