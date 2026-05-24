@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Enabled ADR-0044 Grid Review request workflow and repo-local OpenClaw/Codex review configuration.
+
 ### Internal
 
 - Migrated Communications tests to AwesomeAssertions, refreshed HoneyDrunk.Standards to 0.2.9, and adopted HoneyDrunk.Standards.Tests 0.2.9 for the ADR-0047 test stack.
