@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Onboarded Communications to SonarQube Cloud (ADR-0011 D11). Added `sonar-project.properties` at the repo root and wired a `sonarcloud` job in `pr.yml` (renamed from `pr-core.yml` to match the Grid convention) that calls `HoneyDrunk.Actions/.github/workflows/job-sonarcloud.yml` after `pr-core`. Sources cover `src/` (Communications + Communications.Abstractions); tests cover `tests/`. Abstractions excluded from coverage. The job-level `name: PR Core` is preserved so the existing branch-protection check name continues to match. Branch-protection requirement for the new SonarQube Cloud check added separately after the first successful run lands.
 - Enabled ADR-0044 Grid Review request workflow and repo-local OpenClaw/Codex review configuration.
 
 ### Internal
