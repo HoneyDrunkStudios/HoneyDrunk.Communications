@@ -45,9 +45,9 @@ public sealed class CommunicationOrchestratorTests
     [Fact]
     public async Task Internal_tenant_bypasses_enforcement_but_still_delivers()
     {
-        var sender = new FakeNotificationSender();
+        var gateway = new FakeNotificationGateway();
         var decisionLog = new InMemoryDecisionLog();
-        var orchestrator = CreateOrchestrator(TenantId.Internal, sender, decisionLog);
+        var orchestrator = CreateOrchestrator(TenantId.Internal, gateway, decisionLog);
         var intent = new WelcomeEmailIntent(
             new RecipientHandle("user@example.com", "email"),
             "signup-1",
@@ -56,7 +56,7 @@ public sealed class CommunicationOrchestratorTests
         var decision = await orchestrator.SendAsync(intent);
 
         decision.Outcome.Should().Be(MessageDecisionOutcome.Sent);
-        sender.Envelopes.Should().ContainSingle();
+        gateway.Requests.Should().ContainSingle();
         decisionLog.Entries.Should().ContainSingle(entry => entry.TenantId == TenantId.Internal.ToString());
     }
 
@@ -106,7 +106,7 @@ public sealed class CommunicationOrchestratorTests
         services.AddSingleton<IGridContextAccessor>(new FakeGridContextAccessor(new FakeGridContext(TenantId.Internal)));
         services.AddSingleton<IOperationContextAccessor>(new FakeOperationContextAccessor());
         services.AddSingleton<ITelemetryActivityFactory, FakeTelemetryActivityFactory>();
-        services.AddSingleton<INotificationSender, FakeNotificationSender>();
+        services.AddSingleton<INotificationGateway, FakeNotificationGateway>();
 
         services.AddCommunications(options => options.EnableHealthChecks = false);
 
@@ -114,10 +114,10 @@ public sealed class CommunicationOrchestratorTests
     }
 
     /// <summary>
-    /// Verifies AddCommunications fails fast when the Notify delivery boundary is missing.
+    /// Verifies AddCommunications fails fast when the Notify gateway boundary is missing.
     /// </summary>
     [Fact]
-    public void AddCommunications_requires_notify_sender_boundary()
+    public void AddCommunications_requires_notify_gateway_boundary()
     {
         var services = new ServiceCollection();
         services.AddSingleton<IGridContextAccessor>(new FakeGridContextAccessor(new FakeGridContext(TenantId.Internal)));
@@ -126,20 +126,21 @@ public sealed class CommunicationOrchestratorTests
 
         var act = () => services.AddCommunications();
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*INotificationSender*");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*INotificationGateway*");
     }
 
     /// <summary>
-    /// Verifies the Notify boundary receives the expected welcome-email envelope.
+    /// Verifies the Notify boundary receives the expected welcome-email request.
     /// </summary>
     /// <returns>A task that completes when the test finishes.</returns>
     [Fact]
     public async Task Welcome_email_is_sent_through_notify_boundary()
     {
         var tenantId = TenantId.NewId();
-        var sender = new FakeNotificationSender();
+        var gridContextAccessor = new FakeGridContextAccessor(new FakeGridContext(tenantId));
+        var gateway = new FakeNotificationGateway(gridContextAccessor: gridContextAccessor);
         var decisionLog = new InMemoryDecisionLog();
-        var orchestrator = CreateOrchestrator(tenantId, sender, decisionLog);
+        var orchestrator = CreateOrchestrator(gridContextAccessor, gateway, decisionLog);
         var intent = new WelcomeEmailIntent(
             new RecipientHandle("user@example.com", "email"),
             "signup-1",
@@ -148,24 +149,128 @@ public sealed class CommunicationOrchestratorTests
         var decision = await orchestrator.SendAsync(intent);
 
         decision.Outcome.Should().Be(MessageDecisionOutcome.Sent);
-        sender.Envelopes.Should().ContainSingle();
-        var envelope = sender.Envelopes.Single();
-        envelope.Channel.Should().Be(NotificationChannel.Email);
-        envelope.Recipient.Address.Should().Be("user@example.com");
-        envelope.TemplateKey.ToString().Should().Be(WelcomeEmailIntent.Kind);
+        gateway.Requests.Should().ContainSingle();
+        var request = gateway.Requests.Single();
+        request.Channel.Should().Be(NotificationChannel.Email);
+        request.Recipient.Address.Should().Be("user@example.com");
+        request.TemplateKey.ToString().Should().Be(WelcomeEmailIntent.Kind);
+        request.Model.Should().ContainKey("displayName").WhoseValue.Should().Be("Oleg");
+        request.Tags.Should().Contain(WelcomeEmailIntent.Kind);
+        request.IdempotencyKey.Should().NotBeNull();
+        request.IdempotencyKey!.Value.Value.Should().StartWith("communications:");
+        request.IdempotencyKey.Value.Value.Should().HaveLength(79);
+        decisionLog.Entries.Should().ContainSingle(entry =>
+            entry.TenantId == tenantId.ToString() && entry.CorrelationId == "corr-1");
+
+        gateway.AcceptedEnvelopes.Should().ContainSingle();
+        var envelope = gateway.AcceptedEnvelopes.Single();
         envelope.CorrelationId.Should().Be("corr-1");
         envelope.CausationId.Should().Be("cause-1");
         envelope.NodeId.Should().Be("honeydrunk-communications");
         envelope.Environment.Should().Be("test");
         envelope.TenantId.Should().Be(tenantId.ToString());
-        envelope.Tags.Should().Contain(WelcomeEmailIntent.Kind);
-        decisionLog.Entries.Should().ContainSingle(entry =>
-            entry.TenantId == tenantId.ToString() && entry.CorrelationId == "corr-1");
+    }
+
+    /// <summary>
+    /// Verifies Notify intake rejections are surfaced as failed Communications decisions.
+    /// </summary>
+    /// <returns>A task that completes when the test finishes.</returns>
+    [Fact]
+    public async Task Notify_rejection_returns_failed_decision()
+    {
+        var gateway = new FakeNotificationGateway(NotificationOutcome.Rejected(
+            NotificationId.NewId(),
+            DateTimeOffset.UtcNow,
+            RejectionReason.ValidationFailed,
+            "template missing"));
+        var decisionLog = new InMemoryDecisionLog();
+        var orchestrator = CreateOrchestrator(TenantId.NewId(), gateway, decisionLog);
+        var intent = new MessageIntent(
+            "sms.alert",
+            "event-1",
+            new RecipientHandle("+15555550100", "sms"),
+            new Dictionary<string, string> { ["message"] = "Heads up" });
+
+        var decision = await orchestrator.SendAsync(intent);
+
+        decision.Outcome.Should().Be(MessageDecisionOutcome.Failed);
+        decision.Reason.Should().Be("template missing");
+        gateway.Requests.Should().ContainSingle();
+        var request = gateway.Requests.Single();
+        request.Channel.Should().Be(NotificationChannel.Sms);
+        request.Recipient.Address.Should().Be("+15555550100");
+        request.Model.Should().ContainKey("message").WhoseValue.Should().Be("Heads up");
+        decisionLog.Entries.Should().ContainSingle(entry => entry.Decision == decision);
+    }
+
+    /// <summary>
+    /// Verifies repeated sends of the same intent carry the same Notify idempotency key.
+    /// </summary>
+    /// <returns>A task that completes when the test finishes.</returns>
+    [Fact]
+    public async Task Repeated_intent_uses_deterministic_notify_idempotency_key()
+    {
+        var gateway = new FakeNotificationGateway(rejectDuplicateIdempotencyKeys: true);
+        var decisionLog = new InMemoryDecisionLog();
+        var orchestrator = CreateOrchestrator(TenantId.Internal, gateway, decisionLog);
+        var intent = new MessageIntent(
+            "sms.alert",
+            "event-1",
+            new RecipientHandle("+15555550100", "sms"),
+            new Dictionary<string, string> { ["message"] = "Heads up" });
+
+        var first = await orchestrator.SendAsync(intent);
+        var second = await orchestrator.SendAsync(intent);
+
+        first.Outcome.Should().Be(MessageDecisionOutcome.Sent);
+        second.Outcome.Should().Be(MessageDecisionOutcome.Failed);
+        second.Reason.Should().Be("duplicate idempotency key");
+        gateway.Requests.Should().HaveCount(2);
+        var firstKey = gateway.Requests[0].IdempotencyKey;
+        firstKey.Should().NotBeNull();
+        firstKey.Should().Be(gateway.Requests[1].IdempotencyKey);
+        firstKey!.Value.Value.Should().StartWith("communications:");
+        firstKey.Value.Value.Should().HaveLength(79);
+    }
+
+    /// <summary>
+    /// Verifies otherwise identical sends from different tenants do not collide in Notify dedupe.
+    /// </summary>
+    /// <returns>A task that completes when the test finishes.</returns>
+    [Fact]
+    public async Task Idempotency_key_is_scoped_by_tenant()
+    {
+        var gateway = new FakeNotificationGateway(rejectDuplicateIdempotencyKeys: true);
+        var firstTenantLog = new InMemoryDecisionLog();
+        var secondTenantLog = new InMemoryDecisionLog();
+        var firstOrchestrator = CreateOrchestrator(TenantId.NewId(), gateway, firstTenantLog);
+        var secondOrchestrator = CreateOrchestrator(TenantId.NewId(), gateway, secondTenantLog);
+        var intent = new MessageIntent(
+            "sms.alert",
+            "event-1",
+            new RecipientHandle("+15555550100", "sms"),
+            new Dictionary<string, string> { ["message"] = "Heads up" });
+
+        var first = await firstOrchestrator.SendAsync(intent);
+        var second = await secondOrchestrator.SendAsync(intent);
+
+        first.Outcome.Should().Be(MessageDecisionOutcome.Sent);
+        second.Outcome.Should().Be(MessageDecisionOutcome.Sent);
+        gateway.Requests.Should().HaveCount(2);
+        gateway.Requests[0].IdempotencyKey.Should().NotBe(gateway.Requests[1].IdempotencyKey);
+        gateway.Requests[0].IdempotencyKey!.Value.Value.Should().StartWith("communications:");
+        gateway.Requests[1].IdempotencyKey!.Value.Value.Should().StartWith("communications:");
     }
 
     private static CommunicationOrchestrator CreateOrchestrator(
         TenantId tenantId,
-        FakeNotificationSender sender,
+        FakeNotificationGateway gateway,
+        InMemoryDecisionLog decisionLog) =>
+        CreateOrchestrator(new FakeGridContextAccessor(new FakeGridContext(tenantId)), gateway, decisionLog);
+
+    private static CommunicationOrchestrator CreateOrchestrator(
+        FakeGridContextAccessor gridContextAccessor,
+        FakeNotificationGateway gateway,
         InMemoryDecisionLog decisionLog)
     {
         var options = new FakeOptionsMonitor(new CommunicationsOptions { WelcomeFollowupDelay = TimeSpan.FromDays(2) });
@@ -177,26 +282,73 @@ public sealed class CommunicationOrchestratorTests
             new DefaultRecipientResolver(),
             new InMemoryPreferenceStore(),
             new InMemoryCadencePolicy(),
-            sender,
+            gateway,
             decisionLog,
-            new FakeGridContextAccessor(new FakeGridContext(tenantId)),
+            gridContextAccessor,
             new FakeTelemetryActivityFactory(),
             scheduler,
             options);
     }
 
-    private sealed class FakeNotificationSender : INotificationSender
+    private sealed class FakeNotificationGateway(
+        NotificationOutcome? outcome = null,
+        IGridContextAccessor? gridContextAccessor = null,
+        bool rejectDuplicateIdempotencyKeys = false) : INotificationGateway
     {
-        public List<NotificationEnvelope> Envelopes { get; } = [];
+        private readonly HashSet<IdempotencyKey> acceptedKeys = [];
 
-        public Task<DeliveryOutcome> SendAsync(NotificationEnvelope envelope, CancellationToken cancellationToken = default)
+        public List<NotificationRequest> Requests { get; } = [];
+
+        public List<NotificationEnvelope> AcceptedEnvelopes { get; } = [];
+
+        public Task<NotificationOutcome> EnqueueAsync(NotificationRequest request, CancellationToken cancellationToken = default)
         {
-            this.Envelopes.Add(envelope);
-            return Task.FromResult(DeliveryOutcome.Succeeded(
-                envelope.NotificationId,
-                AttemptId.NewId(),
-                envelope.Channel,
-                "fake"));
+            this.Requests.Add(request);
+            if (outcome is not null)
+            {
+                return Task.FromResult(outcome);
+            }
+
+            var acceptedAt = DateTimeOffset.UtcNow;
+            var notificationId = NotificationId.NewId();
+            if (rejectDuplicateIdempotencyKeys &&
+                request.IdempotencyKey is IdempotencyKey idempotencyKey &&
+                !this.acceptedKeys.Add(idempotencyKey))
+            {
+                return Task.FromResult(NotificationOutcome.Rejected(
+                    notificationId,
+                    acceptedAt,
+                    RejectionReason.DuplicateIdempotencyKey,
+                    "duplicate idempotency key"));
+            }
+
+            this.AcceptedEnvelopes.Add(CreateEnvelope(notificationId, acceptedAt, request));
+            return Task.FromResult(NotificationOutcome.Accepted(notificationId, acceptedAt));
+        }
+
+        private NotificationEnvelope CreateEnvelope(
+            NotificationId notificationId,
+            DateTimeOffset acceptedAt,
+            NotificationRequest request)
+        {
+            var gridContext = gridContextAccessor?.GridContext;
+            return new NotificationEnvelope(
+                notificationId,
+                request.Channel,
+                request.Recipient,
+                request.TemplateKey,
+                request.Model)
+            {
+                CorrelationId = gridContext?.CorrelationId,
+                CausationId = gridContext?.CausationId,
+                NodeId = gridContext?.NodeId,
+                TenantId = gridContext?.TenantId.ToString(),
+                Environment = gridContext?.Environment,
+                Priority = request.Priority,
+                Tags = request.Tags,
+                IdempotencyKey = request.IdempotencyKey,
+                CreatedAtUtc = acceptedAt,
+            };
         }
     }
 

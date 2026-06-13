@@ -23,7 +23,7 @@ internal sealed class CommunicationsStartupHook(IServiceProvider serviceProvider
     /// <returns>A completed task.</returns>
     public Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        _ = serviceProvider.GetRequiredService<INotificationSender>();
+        _ = serviceProvider.GetRequiredService<INotificationGateway>();
         _ = serviceProvider.GetRequiredService<InMemoryFollowupScheduler>();
         return Task.CompletedTask;
     }

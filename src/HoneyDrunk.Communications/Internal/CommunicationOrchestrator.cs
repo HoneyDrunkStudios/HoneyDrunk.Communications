@@ -5,6 +5,8 @@ using HoneyDrunk.Kernel.Abstractions.Identity;
 using HoneyDrunk.Kernel.Abstractions.Telemetry;
 using HoneyDrunk.Notify.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HoneyDrunk.Communications.Internal;
 
@@ -16,7 +18,7 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
     private readonly IRecipientResolver recipientResolver;
     private readonly IPreferenceStore preferenceStore;
     private readonly ICadencePolicy cadencePolicy;
-    private readonly INotificationSender notificationSender;
+    private readonly INotificationGateway notificationGateway;
     private readonly IDecisionLog decisionLog;
     private readonly IGridContextAccessor gridContextAccessor;
     private readonly ITelemetryActivityFactory telemetryActivityFactory;
@@ -29,7 +31,7 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
     /// <param name="recipientResolver">Recipient resolver.</param>
     /// <param name="preferenceStore">Preference store.</param>
     /// <param name="cadencePolicy">Cadence policy.</param>
-    /// <param name="notificationSender">Notify sender boundary.</param>
+    /// <param name="notificationGateway">Notify intake gateway boundary.</param>
     /// <param name="decisionLog">Decision log.</param>
     /// <param name="gridContextAccessor">Grid context accessor.</param>
     /// <param name="telemetryActivityFactory">Telemetry activity factory.</param>
@@ -39,7 +41,7 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
         IRecipientResolver recipientResolver,
         IPreferenceStore preferenceStore,
         ICadencePolicy cadencePolicy,
-        INotificationSender notificationSender,
+        INotificationGateway notificationGateway,
         IDecisionLog decisionLog,
         IGridContextAccessor gridContextAccessor,
         ITelemetryActivityFactory telemetryActivityFactory,
@@ -49,7 +51,7 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
         this.recipientResolver = recipientResolver;
         this.preferenceStore = preferenceStore;
         this.cadencePolicy = cadencePolicy;
-        this.notificationSender = notificationSender;
+        this.notificationGateway = notificationGateway;
         this.decisionLog = decisionLog;
         this.gridContextAccessor = gridContextAccessor;
         this.telemetryActivityFactory = telemetryActivityFactory;
@@ -97,6 +99,27 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
         return await this.SendCoreAsync(intent, tenantId, gridContext, scheduleFollowup: true, cancellationToken).ConfigureAwait(false);
     }
 
+    private static IdempotencyKey CreateIdempotencyKey(
+        IMessageIntent intent,
+        RecipientHandle recipient,
+        NotificationChannel channel,
+        TenantId tenantId)
+    {
+        var material = string.Join(
+            "|",
+            "communications",
+            Segment(tenantId.ToString()),
+            Segment(intent.IntentKind),
+            Segment(intent.TriggerEventId),
+            Segment(recipient.Identity),
+            Segment(channel.ToString()));
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(material))).ToLowerInvariant();
+
+        return new IdempotencyKey($"communications:{hash}");
+    }
+
+    private static string Segment(string value) => $"{value.Length}:{value}";
+
     private async Task<MessageDecision> SendCoreAsync(
         IMessageIntent intent,
         TenantId tenantId,
@@ -112,11 +135,11 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
             var decision = await this.EvaluateRecipientAsync(intent, recipient, tenantId, gridContext.CorrelationId, cancellationToken).ConfigureAwait(false);
             if (decision.Outcome is MessageDecisionOutcome.Allowed)
             {
-                var envelope = this.CreateEnvelope(intent, recipient, gridContext, tenantId);
-                var outcome = await this.notificationSender.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
-                decision = outcome.Status is DeliveryStatus.Succeeded or DeliveryStatus.Deferred
+                var request = this.CreateRequest(intent, recipient, tenantId);
+                var outcome = await this.notificationGateway.EnqueueAsync(request, cancellationToken).ConfigureAwait(false);
+                decision = outcome.Status is NotificationAcceptanceStatus.Accepted
                     ? new MessageDecision(MessageDecisionOutcome.Sent, outcome.Status.ToString(), CorrelationKey: gridContext.CorrelationId)
-                    : new MessageDecision(MessageDecisionOutcome.Failed, outcome.ErrorMessage ?? "notify-delivery-failed", CorrelationKey: gridContext.CorrelationId);
+                    : new MessageDecision(MessageDecisionOutcome.Failed, outcome.RejectionDetail ?? outcome.RejectionReason.ToString(), CorrelationKey: gridContext.CorrelationId);
 
                 if (decision.Outcome is MessageDecisionOutcome.Sent && scheduleFollowup && intent is WelcomeEmailIntent welcomeEmailIntent)
                 {
@@ -186,25 +209,19 @@ public sealed class CommunicationOrchestrator : ICommunicationOrchestrator
         return recipients;
     }
 
-    private NotificationEnvelope CreateEnvelope(IMessageIntent intent, RecipientHandle recipient, IGridContext gridContext, TenantId tenantId)
+    private NotificationRequest CreateRequest(IMessageIntent intent, RecipientHandle recipient, TenantId tenantId)
     {
         var channel = string.Equals(recipient.PreferredChannel, "sms", StringComparison.OrdinalIgnoreCase)
             ? NotificationChannel.Sms
             : NotificationChannel.Email;
 
-        return new NotificationEnvelope(
-            NotificationId.NewId(),
+        return new NotificationRequest(
             channel,
             new Recipient(channel, recipient.Identity),
             new TemplateKey(intent.IntentKind),
             intent.Payload.ToDictionary(pair => pair.Key, pair => (object?)pair.Value, StringComparer.Ordinal))
         {
-            CorrelationId = gridContext.CorrelationId,
-            CausationId = gridContext.CausationId,
-            NodeId = gridContext.NodeId,
-            TenantId = tenantId.ToString(),
-            Environment = gridContext.Environment,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
+            IdempotencyKey = CreateIdempotencyKey(intent, recipient, channel, tenantId),
             Tags = ["communications", intent.IntentKind],
         };
     }

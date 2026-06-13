@@ -16,4 +16,4 @@ services.AddCommunications(options =>
 });
 ```
 
-`AddCommunications(...)` expects Kernel abstraction services (`IGridContextAccessor`, `IOperationContextAccessor`, `ITelemetryActivityFactory`) and `INotificationSender` to be registered first. This keeps Communications tenant-aware and delivery-agnostic while preserving Notify as the outbound boundary without taking a full Kernel runtime dependency.
+`AddCommunications(...)` expects Kernel abstraction services (`IGridContextAccessor`, `IOperationContextAccessor`, `ITelemetryActivityFactory`) and `INotificationGateway` to be registered first. This keeps Communications tenant-aware and delivery-agnostic while preserving Notify as the outbound intake boundary without taking a full Kernel runtime dependency.

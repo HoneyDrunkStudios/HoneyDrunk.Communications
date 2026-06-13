@@ -70,9 +70,9 @@ public sealed class CommunicationsRuntimeBackfillTests
     [Fact]
     public async Task Hosted_scheduler_dispatches_due_welcome_followup_once()
     {
-        var sender = new RecordingNotificationSender();
+        var gateway = new RecordingNotificationGateway();
         await using var provider = BuildProvider(
-            sender,
+            gateway,
             options =>
             {
                 options.WelcomeFollowupDelay = TimeSpan.Zero;
@@ -90,10 +90,10 @@ public sealed class CommunicationsRuntimeBackfillTests
                 new Dictionary<string, string> { ["displayName"] = "Oleg" }));
 
             decision.Outcome.Should().Be(MessageDecisionOutcome.Sent);
-            await WaitForAsync(() => sender.Envelopes.Count >= 2);
+            await WaitForAsync(() => gateway.Requests.Count >= 2);
 
-            sender.Envelopes.Should().HaveCount(2);
-            sender.Envelopes.Select(envelope => envelope.TemplateKey.ToString()).Should().Equal(
+            gateway.Requests.Should().HaveCount(2);
+            gateway.Requests.Select(request => request.TemplateKey.ToString()).Should().Equal(
                 WelcomeEmailIntent.Kind,
                 WelcomeFollowupIntent.Kind);
         }
@@ -148,16 +148,16 @@ public sealed class CommunicationsRuntimeBackfillTests
     }
 
     private static ServiceProvider BuildProvider(
-        RecordingNotificationSender? sender = null,
+        RecordingNotificationGateway? gateway = null,
         Action<CommunicationsOptions>? configure = null)
     {
-        sender ??= new RecordingNotificationSender();
+        gateway ??= new RecordingNotificationGateway();
 
         var services = new ServiceCollection();
         services.AddSingleton<IGridContextAccessor>(new FakeGridContextAccessor(new FakeGridContext(TenantId.NewId())));
         services.AddSingleton<IOperationContextAccessor>(new FakeOperationContextAccessor());
         services.AddSingleton<ITelemetryActivityFactory>(new FakeTelemetryActivityFactory());
-        services.AddSingleton<INotificationSender>(sender);
+        services.AddSingleton<INotificationGateway>(gateway);
         services.AddCommunications(configure);
 
         return services.BuildServiceProvider(validateScopes: true);
@@ -176,34 +176,30 @@ public sealed class CommunicationsRuntimeBackfillTests
         }
     }
 
-    private sealed class RecordingNotificationSender : INotificationSender
+    private sealed class RecordingNotificationGateway : INotificationGateway
     {
         private readonly Lock gate = new();
-        private readonly List<NotificationEnvelope> envelopes = [];
+        private readonly List<NotificationRequest> requests = [];
 
-        public IReadOnlyList<NotificationEnvelope> Envelopes
+        public IReadOnlyList<NotificationRequest> Requests
         {
             get
             {
                 lock (this.gate)
                 {
-                    return this.envelopes.ToArray();
+                    return this.requests.ToArray();
                 }
             }
         }
 
-        public Task<DeliveryOutcome> SendAsync(NotificationEnvelope envelope, CancellationToken cancellationToken = default)
+        public Task<NotificationOutcome> EnqueueAsync(NotificationRequest request, CancellationToken cancellationToken = default)
         {
             lock (this.gate)
             {
-                this.envelopes.Add(envelope);
+                this.requests.Add(request);
             }
 
-            return Task.FromResult(DeliveryOutcome.Succeeded(
-                envelope.NotificationId,
-                AttemptId.NewId(),
-                envelope.Channel,
-                "fake"));
+            return Task.FromResult(NotificationOutcome.Accepted(NotificationId.NewId(), DateTimeOffset.UtcNow));
         }
     }
 

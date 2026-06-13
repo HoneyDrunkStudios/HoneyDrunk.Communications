@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-06-14
+
 ### Changed
 
 - Onboarded Communications to SonarQube Cloud (ADR-0011 D11). Wired a `sonarcloud` job in `pr.yml` (renamed from `pr-core.yml` to match the Grid convention) that calls `HoneyDrunkStudios/HoneyDrunk.Actions/.github/workflows/job-sonarcloud.yml` on both `pull_request` (after `pr-core` succeeds) and `push` to `main` (standalone). PR analysis gates the merge on new-code findings; main-branch analysis populates the SonarCloud Overview dashboard and the leak-period baseline. Per-project source/test classification is discovered automatically from MSBuild `IsTestProject` properties. The job-level `name: PR Core` is preserved so the existing branch-protection check name continues to match after the file rename. Branch-protection requirement for the new SonarQube Cloud check added separately after the first successful run lands.
 - Enabled the ADR-0086 Grid Review request workflow and repo-local local-worker queue configuration.
+- Changed Communications runtime delivery delegation from worker-side `INotificationSender` to Notify's intake-side `INotificationGateway` so Notify owns validation, rendering, dedupe, and queue handoff.
+- Updated runtime package references to `HoneyDrunk.Kernel.Abstractions` 0.8.0 and `HoneyDrunk.Notify.Abstractions` 0.4.0 for the gateway/context propagation contract.
 
 ### Internal
 
