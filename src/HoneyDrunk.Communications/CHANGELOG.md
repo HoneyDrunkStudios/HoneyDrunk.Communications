@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+## 0.3.0 - 2026-06-14
+
+- Changed the runtime Notify boundary from worker-side `INotificationSender` delivery to intake-side `INotificationGateway` enqueueing so Notify owns request validation, rendering, dedupe, and queue handoff.
+- Updated the runtime dependencies to `HoneyDrunk.Kernel.Abstractions` 0.8.0 and `HoneyDrunk.Notify.Abstractions` 0.4.0 for the gateway/context propagation contract.
+
 ## 0.2.0 - 2026-05-18
 
 - Removed the full `HoneyDrunk.Kernel` package dependency; the runtime now consumes Kernel contracts through `HoneyDrunk.Kernel.Abstractions` only.

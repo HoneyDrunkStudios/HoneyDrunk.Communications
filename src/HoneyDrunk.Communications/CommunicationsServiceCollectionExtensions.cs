@@ -31,7 +31,7 @@ public static class CommunicationsServiceCollectionExtensions
         ValidateRequiredService<IGridContextAccessor>(services);
         ValidateRequiredService<IOperationContextAccessor>(services);
         ValidateRequiredService<ITelemetryActivityFactory>(services);
-        ValidateRequiredService<INotificationSender>(services);
+        ValidateRequiredService<INotificationGateway>(services);
 
         var configuredOptions = new CommunicationsOptions();
         configure?.Invoke(configuredOptions);
