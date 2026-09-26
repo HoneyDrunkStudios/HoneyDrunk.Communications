@@ -4,7 +4,7 @@ HoneyDrunk.Communications is the Grid's tenant-aware orchestration layer for out
 
 ## Status
 
-Seed runtime is at `0.2.0`. The current cut includes the contract surface, Kernel abstractions integration, and a concrete welcome-email path with in-memory preferences, cadence, decision logging, and Notify.Abstractions delegation.
+Seed runtime is at `0.3.0`. The current cut includes the contract surface, Kernel abstractions integration, and a concrete welcome-email path with in-memory preferences, cadence, decision logging, and Notify.Abstractions delegation.
 
 ## Packages
 
