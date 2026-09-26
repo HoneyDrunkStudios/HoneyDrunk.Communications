@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.1] - 2026-09-26
+
+### Changed
+
+- Refresh stable NuGet dependencies; preserve target frameworks and HoneyDrunk public contracts.
+
+| Dependency | Previous | Updated |
+| --- | --- | --- |
+| Microsoft.CodeAnalysis.NetAnalyzers | 10.0.202 | 10.0.401 |
+| Microsoft.Extensions.DependencyInjection | 10.0.7 | 10.0.12 |
+| Microsoft.Extensions.Hosting.Abstractions | 10.0.7 | 10.0.12 |
+| Microsoft.Extensions.Options | 10.0.7 | 10.0.12 |
+
+
+
+
+### Verified HoneyDrunk dependencies
+
+- HoneyDrunk.Kernel.Abstractions: 0.7.0 -> 0.8.1 (verified on NuGet.org).
+- HoneyDrunk.Kernel.Abstractions: 0.8.0 -> 0.8.1 (verified on NuGet.org).
+- HoneyDrunk.Notify.Abstractions: 0.4.0 -> 0.5.0 (verified on NuGet.org).
+- HoneyDrunk.Standards: 0.2.9 -> 0.3.0 (verified on NuGet.org).
+- HoneyDrunk.Standards.Tests: 0.2.9 -> 0.3.0 (verified on NuGet.org).
+
 ## Unreleased
 
 ## 0.3.0 - 2026-06-14
