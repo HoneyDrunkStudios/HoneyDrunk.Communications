@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-09-26
+
+### Changed
+
+- Refresh dependency and shared build-tooling versions; preserve target frameworks and existing public contracts. See the [repository dependency changes](../../CHANGELOG.md).
+
 ## 0.3.0 - 2026-06-14
 
 - Aligned the Abstractions package version with the Communications runtime 0.3.0 release; no public Abstractions API changes.
