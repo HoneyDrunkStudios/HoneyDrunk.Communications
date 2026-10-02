@@ -13,4 +13,4 @@ Seed runtime is at `0.3.0`. The current cut includes the contract surface, Kerne
 
 ## Canonical Node Entry
 
-- HoneyDrunk.Architecture catalog: [`catalogs/nodes.json`](https://github.com/HoneyDrunkStudios/HoneyDrunk.Architecture/blob/main/catalogs/nodes.json)
+- HoneyDrunk.Studio catalog: [`catalogs/nodes.json`](https://github.com/HoneyDrunkStudios/HoneyDrunk.Studio/blob/main/catalogs/nodes.json)
