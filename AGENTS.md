@@ -19,3 +19,11 @@ dotnet test HoneyDrunk.Communications.slnx -c Release --no-build
 ```
 
 Use the checked-in workflow and relevant test documentation for additional integration prerequisites, coverage and consumer checks. Do not use live resources or credentials merely to make a local check pass.
+
+## Code Review Rules
+
+Apply the [shared review criteria](https://github.com/HoneyDrunkStudios/HoneyDrunk.Standards/blob/main/HoneyDrunk.Standards/docs/CONVENTIONS.md#code-review) to changed behavior, using the repository boundaries above. Report actionable findings with the failing path, concrete impact and a small corrective action; disclose unavailable evidence. These rules grant no cross-repository access or merge authority.
+
+- Keep recipient/preferences/cadence/suppression decisions here and delegate delivery mechanics to Notify. Preserve the orchestration and decision-record contracts; extend an existing policy seam only for demonstrated behavior.
+- Trace opt-out and tenant boundaries through repeated intents, concurrent decisions, deferred work and failed delivery handoff. Flag suppression bypass, inconsistent decision outcomes, unbounded fan-out or sensitive decision logs.
+- Require policy, duplicate/concurrent-intent and handoff failure tests for changed behavior. In-memory stores demonstrate only their tested scope; do not describe them as durable production evidence or introduce product-specific rules into a shared contract.
