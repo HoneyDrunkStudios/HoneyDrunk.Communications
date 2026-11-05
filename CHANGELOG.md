@@ -26,6 +26,8 @@
 
 ## Unreleased
 
+- Update HoneyDrunk.Standards and HoneyDrunk.Standards.Tests to 0.4.1 to consume the architecture analyzer and TODO issue-link fixes.
+
 ## 0.3.0 - 2026-06-14
 
 ### Changed
